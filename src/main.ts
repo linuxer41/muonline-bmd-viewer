@@ -7,7 +7,7 @@ import { convertOzjToDataUrl } from './ozj-loader';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import GIF from 'gif.js';
 import gifWorkerUrl from 'gif.js/dist/gif.worker.js?url';
-import { isElectron, autoSearchTextures, readFileFromPath, createFileFromElectronData, getFilePathFromFile } from './electron-helper';
+import { isElectron, autoSearchTextures, readFileFromPath, createFileFromElectronData, getFilePathFromFile, openDirectoryDialog, baseName } from './electron-helper';
 import './style.css';
 
 class SkinnedVertexNormalsHelper extends THREE.LineSegments {
@@ -244,6 +244,47 @@ class App {
 
         const exportGlbBtn = document.getElementById('export-glb-btn') as HTMLButtonElement;
         exportGlbBtn.addEventListener('click', () => this.exportToGLB());
+
+        const batchExportBtn = document.getElementById('batch-export-btn') as HTMLButtonElement;
+        batchExportBtn.addEventListener('click', () => this.handleBatchExport());
+
+        // Modal event handlers
+        const selectInputDirBtn = document.getElementById('select-input-dir') as HTMLButtonElement;
+        const selectOutputDirBtn = document.getElementById('select-output-dir') as HTMLButtonElement;
+        const startBatchExportBtn = document.getElementById('start-batch-export') as HTMLButtonElement;
+        const cancelBatchExportBtn = document.getElementById('cancel-batch-export') as HTMLButtonElement;
+        const modal = document.getElementById('batch-export-modal') as HTMLElement;
+
+        selectInputDirBtn.addEventListener('click', async () => {
+            const dirPath = await openDirectoryDialog();
+            if (dirPath) {
+                (document.getElementById('input-dir') as HTMLInputElement).value = dirPath;
+            }
+        });
+
+        selectOutputDirBtn.addEventListener('click', async () => {
+            const dirPath = await openDirectoryDialog();
+            if (dirPath) {
+                (document.getElementById('output-dir') as HTMLInputElement).value = dirPath;
+            }
+        });
+
+        startBatchExportBtn.addEventListener('click', () => {
+            const inputDir = (document.getElementById('input-dir') as HTMLInputElement).value;
+            const outputDir = (document.getElementById('output-dir') as HTMLInputElement).value;
+
+            if (!inputDir || !outputDir) {
+                alert('Please select both input and output directories.');
+                return;
+            }
+
+            modal.style.display = 'none';
+            this.startBatchExport(inputDir, outputDir);
+        });
+
+        cancelBatchExportBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
         
         speedSlider.addEventListener('input', (e) => {
             const speed = parseFloat((e.target as HTMLInputElement).value);
@@ -680,6 +721,152 @@ class App {
             },
             options
         );
+    }
+
+    private handleBatchExport() {
+        const modal = document.getElementById('batch-export-modal') as HTMLElement;
+        const inputDirInput = document.getElementById('input-dir') as HTMLInputElement;
+        const outputDirInput = document.getElementById('output-dir') as HTMLInputElement;
+
+        // Load last used directories from localStorage
+        const inputDir = localStorage.getItem('batchInputDir') || '';
+        const outputDir = localStorage.getItem('batchOutputDir') || '';
+        console.log('Loading batch dirs from localStorage:', inputDir, outputDir);
+        inputDirInput.value = inputDir;
+        outputDirInput.value = outputDir;
+
+        modal.style.display = 'flex';
+    }
+
+    private async startBatchExport(inputDir: string, outputDir: string) {
+        if (!isElectron()) {
+            alert('Batch export is only available in the desktop application.');
+            return;
+        }
+
+        localStorage.setItem('batchInputDir', inputDir);
+        localStorage.setItem('batchOutputDir', outputDir);
+        console.log('Saved batch dirs to localStorage:', inputDir, outputDir);
+
+        const status = document.getElementById('status')!;
+        status.textContent = 'Finding BMD files...';
+
+        try {
+            // Find all BMD files in the input directory
+            const bmdFiles = await window.electronAPI.findBmdFiles(inputDir);
+
+            if (bmdFiles.length === 0) {
+                alert('No BMD files found in the selected input directory.');
+                status.textContent = 'Ready';
+                return;
+            }
+
+            const total = bmdFiles.length;
+
+            status.textContent = `Processing batch export of ${total} BMD files in batches...`;
+
+            // Define the processing function for each file
+            const processFile = async (filePath: string): Promise<void> => {
+                const fileName = await baseName(filePath);
+
+                // Read the BMD file
+                const fileData = await readFileFromPath(filePath);
+                if (!fileData) {
+                    throw new Error(`Failed to read ${filePath}`);
+                }
+
+                const buffer = fileData.data;
+                const { group, requiredTextures } = await this.bmdLoader.load(buffer);
+                group.name = fileName.replace(/\.bmd$/i, '');
+
+                // Auto-search and apply textures
+                if (isElectron() && requiredTextures.length > 0) {
+                    console.log(`Auto-searching textures for ${fileName}...`);
+                    try {
+                        const foundTextures = await autoSearchTextures(filePath, requiredTextures);
+                        const foundCount = Object.keys(foundTextures).length;
+                        if (foundCount > 0) {
+                            const totalFiles = Object.values(foundTextures).reduce((sum, paths) => sum + paths.length, 0);
+                            console.log(`Found ${foundCount} texture names (${totalFiles} files), loading...`);
+                            for (const [textureName, texturePaths] of Object.entries(foundTextures)) {
+                                for (const texturePath of texturePaths) {
+                                    const texFileData = await readFileFromPath(texturePath);
+                                    if (texFileData) {
+                                        const textureFile = createFileFromElectronData(texFileData.name, texFileData.data);
+                                        await this.applyTextureToModel(textureFile, group);
+                                    }
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`Error auto-searching textures for ${fileName}:`, error);
+                    }
+                }
+
+                // Export to GLB
+                const exporter = new GLTFExporter();
+                const options = {
+                    binary: true,
+                    animations: group.animations,
+                    embedImages: true,
+                };
+
+                const glbBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+                    exporter.parse(
+                        group,
+                        (result: ArrayBuffer | { [key: string]: any }) => {
+                            resolve(result as ArrayBuffer);
+                        },
+                        (error) => {
+                            reject(error);
+                        },
+                        options
+                    );
+                });
+
+                // Write to output directory, preserving subfolder structure
+                const relativePath = filePath.replace(inputDir, '').replace(/^[\/\\]/, '').replace(/\.bmd$/i, '.glb');
+                const outputPath = outputDir + '\\' + relativePath;
+
+                await window.electronAPI.writeFile(outputPath, glbBuffer);
+
+                console.log(`✔️  Exported ${relativePath} to ${outputDir}`);
+            };
+
+            // Process files in batches to avoid EMFILE error
+            const batchSize = 100;
+            const allResults: PromiseSettledResult<void>[] = [];
+            for (let i = 0; i < bmdFiles.length; i += batchSize) {
+                const batch = bmdFiles.slice(i, i + batchSize);
+                const promises = batch.map(filePath => processFile(filePath));
+                const batchResults = await Promise.allSettled(promises);
+                allResults.push(...batchResults);
+            }
+
+            // Count results
+            let completed = 0;
+            let failed = 0;
+            allResults.forEach((result, index) => {
+                if (result.status === 'fulfilled') {
+                    completed++;
+                } else {
+                    failed++;
+                    console.error(`❌ Failed to export ${bmdFiles[index]}:`, result.reason);
+                }
+            });
+
+            status.textContent = `Batch export completed: ${completed}/${total} files exported${failed > 0 ? `, ${failed} failed` : ''}.`;
+            setTimeout(() => {
+                status.textContent = 'Ready';
+            }, 3000);
+
+        } catch (error) {
+            console.error('Batch export error:', error);
+            status.textContent = 'Batch export failed.';
+            setTimeout(() => {
+                status.textContent = 'Ready';
+            }, 3000);
+        }
     }
 
     private exportGif() {
@@ -1197,10 +1384,21 @@ class App {
             let applied = false;
             meshList.forEach(m => {
                 if (m.isMatch) {
-                    const mat = m.mesh.material as THREE.MeshPhongMaterial;
+                    const mat = m.mesh.material as THREE.MeshStandardMaterial;
                     if (mat.map) mat.map.dispose();
                     mat.map = tex;
                     mat.color.set(0xffffff);
+                    if (fileExt === 'ozt') {
+                        // OZT has alpha channel, enable transparency
+                        mat.transparent = true;
+                        mat.blending = THREE.NormalBlending;
+                        mat.depthWrite = false;
+                    } else {
+                        // OZJ (JPEG) typically no alpha
+                        mat.transparent = false;
+                        mat.blending = THREE.NoBlending;
+                        mat.depthWrite = true;
+                    }
                     mat.needsUpdate = true;
                     applied = true;
                     if (this.exportBtn) this.exportBtn.disabled = false;
@@ -1225,7 +1423,7 @@ class App {
 
             if (!isNaN(idx) && meshList[idx]) {
                 const target = meshList[idx].mesh;
-                const mat = target.material as THREE.MeshPhongMaterial;
+                const mat = target.material as THREE.MeshStandardMaterial;
                 if (mat.map) mat.map.dispose();
                 mat.map = tex;
                 mat.color.set(0xffffff);
@@ -1240,6 +1438,106 @@ class App {
         } catch (e) {
         console.error('Texture load error:', e);
         status.textContent = `Error: ${(e as Error).message}`;
+        }
+    }
+
+    private async applyTextureToModel(file: File, group: THREE.Group): Promise<void> {
+        const ext = file.name.split('.').pop()!.toLowerCase();
+        let tex: THREE.Texture;
+
+        if (ext === 'tga') {
+            tex = await this.textureLoader.loadAsync(
+                    await convertTgaToDataUrl(await file.arrayBuffer()));
+        } else if (ext === 'ozj' || ext === 'ozt') {
+            tex = await this.textureLoader.loadAsync(
+                    await convertOzjToDataUrl(await file.arrayBuffer()));
+        } else {                              // jpg / png
+            const url = URL.createObjectURL(file);
+            tex = await this.textureLoader.loadAsync(url);
+            URL.revokeObjectURL(url);
+        }
+
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.flipY = false;
+        tex.name  = file.name;
+
+        // allow loading PNG/JPG in place of OZT/OZJ and vice versa
+        const equivExt: Record<string,string[]> = {
+            jpg:  ['ozj', 'jpeg'],
+            jpeg: ['ozj', 'jpg'],
+            ozj:  ['jpg', 'jpeg', 'png'],
+            png:  ['ozj', 'ozt'],
+            tga:  ['ozt', 'png'],
+            ozt:  ['tga', 'png'],
+        };
+
+        const fileName  = file.name.toLowerCase();
+        const fileBase  = fileName.replace(/\.[^.]+$/, '');
+        const fileExt   = fileName.split('.').pop()!;
+
+        function normalizeWanted(path: string): { base:string; ext:string } {
+            const name = path.split(/[\\/]/).pop()!.toLowerCase();
+            const ext  = name.split('.').pop()!;
+            const base = name.replace(/\.[^.]+$/, '');
+            return { base, ext };
+        }
+
+        const meshList: { mesh: THREE.Mesh; path: string; isMatch: boolean }[] = [];
+        group.traverse(obj => {
+            if ((obj as THREE.Mesh).isMesh && obj.userData.texturePath) {
+                const wantedPath = obj.userData.texturePath as string;
+                const { base:wantedBase, ext:wantedExt } = normalizeWanted(wantedPath);
+                const extMatch =
+                    wantedExt === fileExt ||
+                    (equivExt[wantedExt]?.includes(fileExt)) ||
+                    (equivExt[fileExt]?.includes(wantedExt));
+                const isMatch = extMatch && wantedBase === fileBase;
+                meshList.push({ mesh: obj as THREE.Mesh, path: wantedPath, isMatch });
+            }
+        });
+
+        if (fileExt === 'ozj' || fileExt === 'ozt') {
+            let applied = false;
+            meshList.forEach(m => {
+                if (m.isMatch) {
+                    const mat = m.mesh.material as THREE.MeshStandardMaterial;
+                    if (mat.map) mat.map.dispose();
+                    mat.map = tex;
+                    mat.color.set(0xffffff);
+                    if (fileExt === 'ozt') {
+                        // OZT has alpha channel, enable transparency
+                        mat.transparent = true;
+                        mat.blending = THREE.NormalBlending;
+                        mat.depthWrite = false;
+                    } else {
+                        // OZJ (JPEG) typically no alpha
+                        mat.transparent = false;
+                        mat.blending = THREE.NoBlending;
+                        mat.depthWrite = true;
+                    }
+                    mat.needsUpdate = true;
+                    applied = true;
+                }
+            });
+
+            if (!applied) {
+                console.warn(`No matching mesh found for "${file.name}" in group`);
+            }
+        } else {
+            // For non-OZJ/OZT, apply to first matching mesh or all if multiple
+            const matchingMeshes = meshList.filter(m => m.isMatch);
+            if (matchingMeshes.length > 0) {
+                matchingMeshes.forEach(m => {
+                    const mat = m.mesh.material as THREE.MeshStandardMaterial;
+                    if (mat.map) mat.map.dispose();
+                    mat.map = tex;
+                    mat.color.set(0xffffff);
+                    mat.needsUpdate = true;
+                });
+            } else {
+                console.warn(`No matching mesh found for "${file.name}" in group`);
+            }
         }
     }
 
@@ -1261,7 +1559,7 @@ class App {
 
         this.loadedGroup.traverse(obj => {
             if ((obj as THREE.Mesh).isMesh) {
-                const mat = (obj as THREE.Mesh).material as THREE.MeshPhongMaterial;
+                const mat = (obj as THREE.Mesh).material as THREE.MeshStandardMaterial;
                 if (!mat.map || exported.has(mat.map)) return;
 
                 const textureImage = mat.map.image;

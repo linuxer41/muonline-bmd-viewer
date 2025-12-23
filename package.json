@@ -20,11 +20,20 @@
   "license": "ISC",
   "description": "BMD Viewer for MU Online 3D models",
   "dependencies": {
+    "@gltf-transform/core": "^4.2.1",
     "@lunapaint/tga-codec": "^0.2.0",
     "@types/crypto-js": "^4.2.2",
+    "@types/jsdom": "^27.0.0",
+    "canvas": "^3.2.0",
     "crypto-js": "^4.2.0",
     "gif.js": "^0.2.0",
-    "three": "^0.181.2"
+    "gltf-pipeline": "^4.3.0",
+    "jsdom": "^27.3.0",
+    "node-three-gltf": "^2.1.0",
+    "sharp": "^0.34.5",
+    "three": "^0.181.2",
+    "three-gltf-exporter": "^0.0.1",
+    "three-universal": "^0.125.2"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
@@ -39,6 +48,7 @@
     "style-loader": "^4.0.0",
     "ts-jest": "^29.4.5",
     "ts-loader": "^9.5.4",
+    "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vite": "^7.2.4",
     "wait-on": "^9.0.3",

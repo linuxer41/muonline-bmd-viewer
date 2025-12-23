@@ -502,3 +502,84 @@ input[type="color"] {
     justify-content: center;
   }
 }
+
+/* --- MODAL --- */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: var(--bg-panel);
+  border: var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: var(--shadow-panel);
+}
+
+.modal-content h3 {
+  margin: 0 0 1.5rem 0;
+  color: var(--text-main);
+  font-size: 1.2rem;
+  text-align: center;
+}
+
+.modal-body {
+  margin-bottom: 2rem;
+}
+
+.input-group {
+  margin-bottom: 1.5rem;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.input-with-button {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-with-button input {
+  flex: 1;
+}
+
+.modern-btn.small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  width: auto;
+  white-space: nowrap;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.modern-btn.secondary {
+  background: transparent;
+  border: 1px solid var(--text-dim);
+  color: var(--text-muted);
+}
+
+.modern-btn.secondary:hover {
+  background: var(--bg-hover);
+  color: var(--text-main);
+}

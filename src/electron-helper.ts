@@ -6,9 +6,13 @@ interface ElectronAPI {
   isElectron: boolean;
   openFile: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>;
   openFiles: (options?: { filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string[]>;
+  openDirectory: () => Promise<string | null>;
   readFile: (filePath: string) => Promise<{ name: string; data: ArrayBuffer }>;
   searchTextures: (startPath: string, requiredTextures: string[]) => Promise<Record<string, string[]>>;
   getFilePath: (file: File) => string | null;
+  writeFile: (filePath: string, data: ArrayBuffer) => Promise<void>;
+  findBmdFiles: (startPath: string) => Promise<string[]>;
+  baseName: (filePath: string) => string;
 }
 
 declare global {
@@ -51,11 +55,46 @@ export async function openFileDialog(filters?: Array<{ name: string; extensions:
  * Open multiple files dialog (Electron only)
  */
 export async function openFilesDialog(filters?: Array<{ name: string; extensions: string[] }>): Promise<string[]> {
-  if (!isElectron() || !window.electronAPI) {
-    console.warn('openFilesDialog is only available in Electron');
-    return [];
-  }
+  // if (!isElectron() || !window.electronAPI) {
+  //   console.warn('openFilesDialog is only available in Electron');
+  //   return [];
+  // }
   return window.electronAPI.openFiles({ filters });
+}
+
+export async function writeFile(filePath: string, data: ArrayBuffer): Promise<void> {
+  // if (!isElectron() || !window.electronAPI) {
+  //   console.warn('writeFile is only available in Electron');
+  //   return;
+  // }
+  return window.electronAPI.writeFile(filePath, data);
+}
+
+export async function findBmdFiles(startPath: string): Promise<string[]> {
+  // if (!isElectron() || !window.electronAPI) {
+  //   console.warn('findBmdFiles is only available in Electron');
+  //   return [];
+  // }
+  return window.electronAPI.findBmdFiles(startPath);
+}
+
+export async function baseName(filePath: string): Promise<string> {
+  // if (!isElectron() || !window.electronAPI) {
+  //   console.warn('baseName is only available in Electron');
+  //   return '';
+  // }
+  return window.electronAPI.baseName(filePath);
+}
+
+/**
+ * Open directory dialog (Electron only)
+ */
+export async function openDirectoryDialog(): Promise<string | null> {
+  if (!isElectron() || !window.electronAPI) {
+    console.warn('openDirectoryDialog is only available in Electron');
+    return null;
+  }
+  return window.electronAPI.openDirectory();
 }
 
 /**

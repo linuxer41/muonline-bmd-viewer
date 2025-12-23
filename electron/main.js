@@ -81,6 +81,19 @@ ipcMain.handle('dialog:openFiles', async (event, options) => {
   return filePaths;
 });
 
+// Handle directory selection
+ipcMain.handle('dialog:openDirectory', async (event) => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+  });
+
+  if (canceled || !filePaths || filePaths.length === 0) {
+    return null;
+  }
+
+  return filePaths[0];
+});
+
 // Read file as ArrayBuffer
 ipcMain.handle('fs:readFile', async (event, filePath) => {
   try {
@@ -145,6 +158,67 @@ ipcMain.handle('fs:searchTextures', async (event, startPath, requiredTextures) =
   console.log(`[Texture Search] Found ${Object.keys(foundTextures).length}/${requiredNames.length} texture names (${Object.values(foundTextures).reduce((sum, arr) => sum + arr.length, 0)} files total)`);
 
   return foundTextures;
+});
+
+// Find all BMD files in directory and subdirectories
+ipcMain.handle('fs:findBmdFiles', async (event, startPath) => {
+ const bmdFiles = [];
+
+ async function searchDir(dirPath, depth = 0) {
+   if (depth > 5) return; // Limit depth to prevent infinite recursion
+
+   try {
+     const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+     for (const entry of entries) {
+       const fullPath = path.join(dirPath, entry.name);
+
+       if (entry.isDirectory()) {
+         // Recursively search subdirectories
+         await searchDir(fullPath, depth + 1);
+       } else if (entry.isFile()) {
+         const lowerName = entry.name.toLowerCase();
+         if (lowerName.endsWith('.bmd')) {
+           bmdFiles.push(fullPath);
+         }
+       }
+     }
+   } catch (error) {
+     // Ignore permission errors, etc.
+   }
+ }
+
+ await searchDir(startPath);
+
+ console.log(`[Find BMD Files] Found ${bmdFiles.length} BMD files in ${startPath}`);
+ return bmdFiles;
+});
+
+// Write file to disk
+ipcMain.handle('fs:writeFile', async (event, filePath, data) => {
+ try {
+   // Ensure directory exists
+   const dir = path.dirname(filePath);
+   await fs.mkdir(dir, { recursive: true });
+
+   // Write the file
+   await fs.writeFile(filePath, Buffer.from(data));
+   console.log(`[Write File] Saved ${filePath}`);
+ } catch (error) {
+   console.error('Error writing file:', error);
+   throw error;
+ }
+});
+
+// Create directory
+ipcMain.handle('fs:mkdir', async (event, dirPath) => {
+ try {
+   await fs.mkdir(dirPath, { recursive: true });
+   console.log(`[Mkdir] Created directory ${dirPath}`);
+ } catch (error) {
+   console.error('Error creating directory:', error);
+   throw error;
+ }
 });
 
 app.whenReady().then(createWindow);

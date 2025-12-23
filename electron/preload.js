@@ -1,6 +1,11 @@
 // Electron preload script - secure bridge between main and renderer
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+// Simple basename implementation since path module is not available in sandboxed preload
+function basename(filePath) {
+  return filePath.replace(/[/\\]*$/, '').split(/[/\\]/).pop() || '';
+}
+
 // Expose safe API to renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
   // Check if running in Electron
@@ -12,11 +17,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Open multiple files dialog
   openFiles: (options) => ipcRenderer.invoke('dialog:openFiles', options),
 
+  // Open directory dialog
+  openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+
   // Read file from disk
   readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
 
   // Search for textures in directory and subdirectories
   searchTextures: (startPath, requiredTextures) => ipcRenderer.invoke('fs:searchTextures', startPath, requiredTextures),
+  writeFile: (filePath, data) => ipcRenderer.invoke('fs:writeFile', filePath, data),
+  mkdir: (dirPath) => ipcRenderer.invoke('fs:mkdir', dirPath),
+  findBmdFiles: (startPath) => ipcRenderer.invoke('fs:findBmdFiles', startPath),
+
+  baseName: (filePath) => basename(filePath),
 
   // Get real file path from File object (for drag & drop)
   getFilePath: (file) => {

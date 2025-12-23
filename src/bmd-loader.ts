@@ -190,9 +190,11 @@ export class BMDLoader {
         bmd.meshes.forEach(bmdMesh => {
             const geometry = new THREE.BufferGeometry();
             
-            const material = new THREE.MeshPhongMaterial({
+            const material = new THREE.MeshStandardMaterial({
                 color: 0xcccccc,
                 side: THREE.DoubleSide,
+                metalness: 0.4,
+                roughness: 1,
             });
 
             const { positions, normals, uvs, skinIndices, skinWeights } = this.extractGeometry(bmdMesh);
@@ -509,7 +511,6 @@ private readStringFromDataView(view: DataView, offset: number, length: number): 
 
             if (tracks.length) {
                 const clip = new THREE.AnimationClip(`action_${a}`, duration, tracks);
-                // @ts-expect-error: userData is not typed on AnimationClip, but Three.js supports it
                 clip.userData = { numAnimationKeys: action.numAnimationKeys }; // Store numAnimationKeys here
                 clips.push(clip);
             }

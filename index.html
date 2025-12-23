@@ -30,6 +30,7 @@
             <input type="file" id="bmd-file-input" accept=".bmd" style="display: none;" />
           </div>
 
+
           <div class="drop-zone" id="anim-bmd-drop-zone" title="Load External Animations">
             <p>Drop animation <strong>.bmd</strong> (optional)</p>
             <input type="file" id="anim-bmd-file-input" accept=".bmd" style="display: none;" />
@@ -191,6 +192,11 @@
           </div>
         </div>
 
+        <div class="control-section" id="batch-export-controls">
+          <h3>Batch Export</h3>
+          <button id="batch-export-btn" class="modern-btn">Batch Export BMD to GLB</button>
+        </div>
+
         <!-- Hidden Compatibility Elements (Do not remove) -->
         <div style="display: none;">
           <div id="blending-controls"><div id="blending-container"></div></div>
@@ -203,6 +209,33 @@
 
       </div>
     </aside>
+
+    <!-- Batch Export Modal -->
+    <div id="batch-export-modal" class="modal" style="display: none;">
+      <div class="modal-content">
+        <h3>Batch Export BMD to GLB</h3>
+        <div class="modal-body">
+          <div class="input-group">
+            <label for="input-dir">Input Directory:</label>
+            <div class="input-with-button">
+              <input type="text" id="input-dir" placeholder="Select input directory containing BMD files">
+              <button id="select-input-dir" class="modern-btn small">Browse</button>
+            </div>
+          </div>
+          <div class="input-group">
+            <label for="output-dir">Output Directory:</label>
+            <div class="input-with-button">
+              <input type="text" id="output-dir" placeholder="Select output directory for GLB files">
+              <button id="select-output-dir" class="modern-btn small">Browse</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-buttons">
+          <button id="start-batch-export" class="modern-btn">Start Export</button>
+          <button id="cancel-batch-export" class="modern-btn secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Main Viewport -->
     <main class="main-content" id="main-content">
