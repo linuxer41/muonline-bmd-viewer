@@ -9,6 +9,7 @@ import GIF from 'gif.js';
 import gifWorkerUrl from 'gif.js/dist/gif.worker.js?url';
 import { isElectron, autoSearchTextures, readFileFromPath, createFileFromElectronData, getFilePathFromFile, openDirectoryDialog, baseName } from './electron-helper';
 import './style.css';
+import { pMap } from './batch-utils';
 
 class SkinnedVertexNormalsHelper extends THREE.LineSegments {
     public skinned: THREE.SkinnedMesh;
@@ -762,12 +763,14 @@ class App {
             }
 
             const total = bmdFiles.length;
+            const concurrency = 4; // parallel files at once
 
-            status.textContent = `Processing batch export of ${total} BMD files in batches...`;
+            status.textContent = `Processing batch export of ${total} BMD files (concurrency=${concurrency})...`;
 
             // Define the processing function for each file
-            const processFile = async (filePath: string): Promise<void> => {
+            const processFile = async (filePath: string, index: number): Promise<void> => {
                 const fileName = await baseName(filePath);
+                status.textContent = `[${index + 1}/${total}] Processing ${fileName}...`;
 
                 // Read the BMD file
                 const fileData = await readFileFromPath(filePath);
@@ -833,27 +836,19 @@ class App {
                 console.log(`✔️  Exported ${relativePath} to ${outputDir}`);
             };
 
-            // Process files in batches to avoid EMFILE error
-            const batchSize = 100;
-            const allResults: PromiseSettledResult<void>[] = [];
-            for (let i = 0; i < bmdFiles.length; i += batchSize) {
-                const batch = bmdFiles.slice(i, i + batchSize);
-                const promises = batch.map(filePath => processFile(filePath));
-                const batchResults = await Promise.allSettled(promises);
-                allResults.push(...batchResults);
-            }
-
-            // Count results
-            let completed = 0;
-            let failed = 0;
-            allResults.forEach((result, index) => {
-                if (result.status === 'fulfilled') {
-                    completed++;
-                } else {
-                    failed++;
-                    console.error(`❌ Failed to export ${bmdFiles[index]}:`, result.reason);
+            // Process files with concurrency control
+            const results = await pMap(bmdFiles, async (filePath, index) => {
+                try {
+                    await processFile(filePath, index);
+                    return 'fulfilled' as const;
+                } catch (error) {
+                    console.error(`❌ Failed to export ${filePath}:`, error);
+                    return 'rejected' as const;
                 }
-            });
+            }, concurrency);
+
+            const completed = results.filter(r => r === 'fulfilled').length;
+            const failed = results.filter(r => r === 'rejected').length;
 
             status.textContent = `Batch export completed: ${completed}/${total} files exported${failed > 0 ? `, ${failed} failed` : ''}.`;
             setTimeout(() => {

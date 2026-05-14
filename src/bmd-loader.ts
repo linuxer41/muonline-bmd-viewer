@@ -399,10 +399,11 @@ export class BMDLoader {
               mat.rotation.push({ x: readF32(), y: readF32(), z: readF32() });
             }
 
-            mat.rotation.forEach(r => {
+            for (let k = 0; k < keys; k++) {
+              const r = mat.rotation[k];
               const q = bmdAngleToQuaternion(r);
               mat.quaternion.push({ x:q.x, y:q.y, z:q.z, w:q.w });
-            });
+            }
 
             bone.matrixes.push(mat);
           }
